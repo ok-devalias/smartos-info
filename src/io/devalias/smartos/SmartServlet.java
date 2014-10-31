@@ -83,7 +83,7 @@ public class SmartServlet extends HttpServlet {
 		    URLFetchService urlFetchService = URLFetchServiceFactory.getURLFetchService();
 		    HTTPRequest request = new HTTPRequest(url, method, withDefaults().setDeadline(30.00));
 		    request.addHeader(new HTTPHeader("Content-Type", "application/json"));
-		    request.addHeader(new HTTPHeader("accept", "application/json"));
+		    request.addHeader(new HTTPHeader("Accept", "application/json"));
 
 		    if ( loginJson != null) {
 			    request.setPayload(loginJson.toString().getBytes());
@@ -96,15 +96,14 @@ public class SmartServlet extends HttpServlet {
             
             if (response.getResponseCode() == HttpURLConnection.HTTP_OK) {
                 // OK
-            	logger.info("HTTP response OK");
+            	logger.info("HTTP response OK: " + response.getResponseCode());
             	if (!response.getHeaders().isEmpty()){
             		logger.info("Total Headers: " + Integer.toString(response.getHeaders().size()));
-            		for (Iterator<HTTPHeader> headers = response.getHeaders().iterator(); headers.hasNext();) {
-            			HTTPHeader curHeader = headers.next();
-            			logger.info("Header: " + curHeader.getName() + "\nValue: " + curHeader.getValue());
-            			if (curHeader.getName().equals("x-snarl-token")) {
+            		for (HTTPHeader header : response.getHeaders() ) {
+            			logger.info("Header: " + header.getName() + "\nValue: " + header.getValue());
+            			if (header.getName().equals("x-snarl-token")) {
             				logger.info("Found x-snarl-token!");            				
-            				return curHeader;
+            				return header;
             			}
             		}
             	} else {
