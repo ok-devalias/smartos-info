@@ -2,11 +2,11 @@ package io.devalias.smartos;
 
 import static com.google.appengine.api.urlfetch.FetchOptions.Builder.withDefaults;
 
+import java.io.DataOutputStream;
 import java.io.IOException;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.net.HttpURLConnection;
-import java.util.Iterator;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -34,7 +34,7 @@ public class SmartServlet extends HttpServlet {
 		String		apiVer	= "api/0.1.0";
 		String		apiCall = "vms";
 		HTTPMethod	method	= HTTPMethod.GET;
-		HTTPHeader	session = getSession(baseUrl, apiVer);
+		HTTPHeader	session = getSession(baseUrl, apiVer); // Snarl's session token is send via header
 		String 		fullUrl = String.format("%s/%s/%s", baseUrl, apiVer, apiCall );
 		logger.info("Returned from getSession()");
 		
@@ -44,23 +44,40 @@ public class SmartServlet extends HttpServlet {
 			json = fetchURL(fullUrl, session, method);
 		if (json != null) {
 			logger.info("json response received, not null");
-			resp.getWriter().write(json.toString());
+			String output = "nothing!";
+			try {
+				output = (String) json.get("vm").toString();
+			} catch (JSONException e) {
+				logger.log(Level.SEVERE, e.getMessage(), e);
+			}
+			resp.getWriter().write(output);
 		} else {
 			logger.info("json response null.");
 			resp.getWriter().write("We Got Nothin");
-		}		
+		}
 	}
-	
+
+	// prepare to get a session
 	private HTTPHeader getSession(String baseUrl, String apiVer) {
 		JSONObject loginJson = new JSONObject();
 		String fullUrl = String.format("%s/%s/%s", baseUrl, apiVer, "sessions" );
+		URL url;
+		HttpURLConnection connection;
+		try {
+			url = new URL(fullUrl);
+			connection = (HttpURLConnection) url.openConnection();
+		} catch (IOException e1) {
+			// TODO Auto-generated catch block
+			logger.log(Level.SEVERE, e1.getMessage(), e1);
+			return null;
+		}
+
 		logger.info("Target Url, Session: " + fullUrl);
-		
 		logger.info("set login payload");
-    	try {
-    		loginJson.put("password", "gae808");
+		try {
+			loginJson.put("password", "gae808");
 			loginJson.put("user", "gae");
-			logger.info("login set.");
+			logger.info("Login payload set.");
 		} catch (JSONException e1) {
 			// TODO Auto-generated catch block
 			logger.log(Level.SEVERE, e1.getMessage(), e1);
@@ -68,7 +85,7 @@ public class SmartServlet extends HttpServlet {
 
 		try {
 			logger.info("Attempting URlFetch to get session token");
-			return fetchURL(fullUrl, loginJson, HTTPMethod.POST);  // this needs to come from an HTTPHeader.
+			return fetchURL(connection, loginJson, HTTPMethod.POST);  // this needs to come from an HTTPHeader.
 		} catch (NullPointerException e) {
 			// TODO Auto-generated catch block
 			logger.log(Level.SEVERE, e.getMessage(), e);
@@ -76,44 +93,41 @@ public class SmartServlet extends HttpServlet {
 		return null;
 	}
 
-	private HTTPHeader fetchURL(String target, JSONObject loginJson, HTTPMethod method) {
+	// URLFetch call to get a valid session token
+	private HTTPHeader fetchURL(HttpURLConnection connection, JSONObject urlParameters, HTTPMethod method) {
 		logger.info("entering fetchURL without session");
 		try {
-		    URL 			url = new URL(target);
-		    URLFetchService urlFetchService = URLFetchServiceFactory.getURLFetchService();
-		    HTTPRequest request = new HTTPRequest(url, method, withDefaults().setDeadline(30.00));
-		    request.addHeader(new HTTPHeader("Content-Type", "application/json"));
-		    request.addHeader(new HTTPHeader("Accept", "application/json"));
-
-		    if ( loginJson != null) {
-			    request.setPayload(loginJson.toString().getBytes());
-		    	logger.info("Payload Set");
-		    } else {
-		    	// bail out
-		    	return null;
-		    }
-            HTTPResponse response = urlFetchService.fetch(request);
-            
-            if (response.getResponseCode() == HttpURLConnection.HTTP_OK) {
+			logger.info("set request method and headers");
+		    connection.setRequestMethod(method.name());
+		    connection.setRequestProperty("Accept", "application/json");
+		    connection.setRequestProperty("Content-Type", "application/json");
+		    connection.setDoOutput(true);
+		    connection.setDoInput(true);
+		    connection.setInstanceFollowRedirects(false);
+		    logger.info("set POST parameters");
+		    DataOutputStream wr = new DataOutputStream(connection.getOutputStream());
+		     wr.writeBytes(urlParameters.toString());
+		     wr.flush();
+		     wr.close();
+		    
+            int code = connection.getResponseCode();
+            logger.info("Check response code.");
+            if (code == HttpURLConnection.HTTP_OK || code == HttpURLConnection.HTTP_SEE_OTHER) {
                 // OK
-            	logger.info("HTTP response OK: " + response.getResponseCode());
-            	if (!response.getHeaders().isEmpty()){
-            		logger.info("Total Headers: " + Integer.toString(response.getHeaders().size()));
-            		for (HTTPHeader header : response.getHeaders() ) {
-            			logger.info("Header: " + header.getName() + "\nValue: " + header.getValue());
-            			if (header.getName().equals("x-snarl-token")) {
-            				logger.info("Found x-snarl-token!");            				
-            				return header;
-            			}
-            		}
-            	} else {
-            		logger.info("response.getContent() was null\n"
-            				+ response.toString());
+            	logger.info("HTTP response OK: " + code);
+            	String token = connection.getHeaderFields().get("x-snarl-token").get(0);
+
+    			if (token != null) {
+    				logger.info("Found x-snarl-token!");
+    				HTTPHeader snarl = new HTTPHeader("x-snarl-token", token);
+    				return snarl;
+    			} else {
+            		logger.info("No x-snarl-token found.");
             		return null;
             	}
             } else {
                 // Server returned HTTP error code.
-            	logger.info("Response Code NOT ok: " + response.getResponseCode());
+            	logger.info("Response Code NOT ok: " + code);
             	return null;
             }		    
 		} catch (MalformedURLException e) {
@@ -123,11 +137,12 @@ public class SmartServlet extends HttpServlet {
 		}
 		return null;
 	}
-	
+
+	// URLFetch call with a valid session token
 	private JSONObject fetchURL(String target, HTTPHeader session, HTTPMethod method) {
 		logger.info("Entering fetchURL with session");
 		JSONObject json = null;
-						
+
 		try {
 		    URL 			url = new URL(target);
 		    URLFetchService urlFetchService = URLFetchServiceFactory.getURLFetchService();
@@ -143,34 +158,32 @@ public class SmartServlet extends HttpServlet {
 		    	logger.info("No session. Aborting.");
 		    	return null;
 		    }
-            
+
             HTTPResponse response = urlFetchService.fetch(request);
-            
+
             if (response.getResponseCode() == HttpURLConnection.HTTP_OK) {
                 // OK
             	logger.info("HTTP response OK: " + response.getResponseCode());
-            	logger.info("Response Headers: \n"
-            			+ response.getHeaders().toString());
-            	byte[] content = response.getContent();
-            	if (content != null){
-            		json = new JSONObject(content.toString());
-        		    logger.info("Created JSONObject");
-            	} else {
-            		logger.info("response.getContent() was null\n"
-            				+ response.toString());
-            		return null;
-            	}    			
+            	for (HTTPHeader header : response.getHeaders() )
+        			logger.info("Header: " + header.getName() + "\nValue: " + header.getValue());
+            	String content = new String(response.getContent());
+            	logger.info("Response Content received: " + content);
+
+            	//logger.info("Response Content: " + uuids);
+            	json = new JSONObject();
+            	json.put("vm", content);
+        		logger.info("Created JSONObject");
             } else {
                 // Server returned HTTP error code.
             	logger.info("Response Code NOT ok: " + response.getResponseCode());
             	return null;
-            }		    
+            }
 		} catch (MalformedURLException e) {
-			e.printStackTrace();
+			logger.log(Level.SEVERE, e.getMessage(), e);
 		} catch (IOException e) {
-			e.printStackTrace();
+			logger.log(Level.SEVERE, e.getMessage(), e);
 		} catch (JSONException e) {
-			e.printStackTrace();
+			logger.log(Level.SEVERE, e.getMessage(), e);
 		}
 		return json;
 	}
