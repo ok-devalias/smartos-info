@@ -51,7 +51,7 @@ public class SmartServlet extends HttpServlet {
 				logger.log(Level.SEVERE, e.getMessage(), e);
 			}
 
-			String[] vms = output.replace("[", "").replace("[", "").split(",");
+			String[] vms = output.replace("[", "").replace("]", "").split(",");
 			for ( String uuid : vms)
 				resp.getWriter().write("\nVM UUID: " + uuid);
 		} else {
