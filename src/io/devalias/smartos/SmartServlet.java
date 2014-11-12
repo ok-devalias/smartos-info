@@ -7,6 +7,7 @@ import java.io.IOException;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.net.HttpURLConnection;
+import java.util.Iterator;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -51,8 +52,27 @@ public class SmartServlet extends HttpServlet {
 				logger.log(Level.SEVERE, e.getMessage(), e);
 			}
 			String[] vms = output.replace("[", "").replace("]", "").replace("\"", "").split(",");
-			for ( String uuid : vms)
-				resp.getWriter().write("\nVM UUID: " + uuid);
+			JSONObject vminfo = null;
+			String vmUrl = fullUrl;
+			for ( String uuid : vms) {
+				logger.info("Processing UUID " + uuid);
+				resp.getWriter().write("VM UUID: " + uuid + "\n");
+				vmUrl = String.format("%s/%s", fullUrl, uuid);
+				logger.info("Target URL: " + vmUrl);
+				vminfo = fetchURL(vmUrl, session, method);
+				try {
+					String value;
+					for (Iterator iter = vminfo.keys(); iter.hasNext();) {
+						value = vminfo.getString(key);
+						resp.getWriter().write(String.format("%s: %s", key, value) + "\n");
+					}
+				} catch (JSONException e) {
+					logger.log(Level.SEVERE, e.getMessage(), e);
+				} catch (NullPointerException e) {
+					logger.info("getNames response null for " + uuid);
+					logger.log(Level.SEVERE, e.getMessage(), e);
+				}
+			}
 		} else {
 			logger.info("json response null.");
 			resp.getWriter().write("We Got Nothin");
