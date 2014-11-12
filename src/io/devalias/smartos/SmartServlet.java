@@ -37,11 +37,11 @@ public class SmartServlet extends HttpServlet {
 		HTTPHeader	session = getSession(baseUrl, apiVer); // Snarl's session token is send via header
 		String 		fullUrl = String.format("%s/%s/%s", baseUrl, apiVer, apiCall );
 		logger.info("Returned from getSession()");
-		
-		
+
 		if ( session != null)
 			logger.info("session exists, URLFetch target: " + fullUrl);
 			json = fetchURL(fullUrl, session, method);
+
 		if (json != null) {
 			logger.info("json response received, not null");
 			String output = "nothing!";
@@ -50,7 +50,10 @@ public class SmartServlet extends HttpServlet {
 			} catch (JSONException e) {
 				logger.log(Level.SEVERE, e.getMessage(), e);
 			}
-			resp.getWriter().write(output);
+
+			String[] vms = output.replace("[", "").replace("[", "").split(",");
+			for ( String uuid : vms)
+				resp.getWriter().write("\nVM UUID: " + uuid);
 		} else {
 			logger.info("json response null.");
 			resp.getWriter().write("We Got Nothin");
