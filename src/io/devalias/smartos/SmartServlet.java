@@ -61,8 +61,10 @@ public class SmartServlet extends HttpServlet {
 				logger.info("Target URL: " + vmUrl);
 				vminfo = fetchURL(vmUrl, session, method);
 				try {
-					String value;
+					String value, key;
 					for (Iterator iter = vminfo.keys(); iter.hasNext();) {
+						key = (String) iter.next();
+						logger.info("Processing key " + key);
 						value = vminfo.getString(key);
 						resp.getWriter().write(String.format("%s: %s", key, value) + "\n");
 					}
