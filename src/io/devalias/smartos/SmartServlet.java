@@ -13,6 +13,9 @@ import java.util.logging.Logger;
 
 import javax.servlet.http.*;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 import com.google.appengine.labs.repackaged.org.json.JSONException;
 import com.google.appengine.labs.repackaged.org.json.JSONObject;
 import com.google.appengine.api.urlfetch.HTTPHeader;
@@ -60,9 +63,13 @@ public class SmartServlet extends HttpServlet {
 				vmUrl = String.format("%s/%s", fullUrl, uuid);
 				logger.info("Target URL: " + vmUrl);
 				vminfo = fetchURL(vmUrl, session, method);
+				JsonNode node = new ObjectMapper().readTree(vminfo.toString());
+				resp = printNode(node, resp);
+			     /*
 				try {
 					String value, key;
-					for (Iterator iter = vminfo.keys(); iter.hasNext();) {
+					for (@SuppressWarnings("rawtypes")
+					Iterator iter = vminfo.keys(); iter.hasNext();) {
 						key = (String) iter.next();
 						logger.info("Processing key " + key);
 						value = vminfo.getString(key);
@@ -73,7 +80,7 @@ public class SmartServlet extends HttpServlet {
 				} catch (NullPointerException e) {
 					logger.info("getNames response null for " + uuid);
 					logger.log(Level.SEVERE, e.getMessage(), e);
-				}
+				}*/
 			}
 		} else {
 			logger.info("json response null.");
@@ -81,6 +88,24 @@ public class SmartServlet extends HttpServlet {
 		}
 	}
 
+	// recurse through Jackson JsonNode set, print all key/value pairs individually.
+	private HttpServletResponse printNode(JsonNode tree, HttpServletResponse resp) throws IOException{
+		 Iterator<String> fieldNames = tree.fieldNames();
+	     while(fieldNames.hasNext()){
+	         String fieldName = fieldNames.next();
+	         JsonNode fieldValue = tree.get(fieldName);
+	         if (fieldValue.isObject()) {
+	        	 resp.getWriter().write(String.format("%s: ", fieldName + "\n"));
+	            printNode(fieldValue, resp);
+	         } else {
+	            String value = fieldValue.asText();
+	            resp.getWriter().write(String.format("%s: %s", fieldName, value) + "\n");
+	         }
+	     }
+	     resp.getWriter().write("\n\n");
+	     return resp;
+	}
+	
 	// prepare to get a session
 	private HTTPHeader getSession(String baseUrl, String apiVer) {
 		JSONObject loginJson = new JSONObject();
