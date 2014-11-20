@@ -91,17 +91,24 @@ public class SmartServlet extends HttpServlet {
 	// recurse through Jackson JsonNode set, print all key/value pairs individually.
 	private HttpServletResponse printNode(JsonNode tree, HttpServletResponse resp) throws IOException{
 		 Iterator<String> fieldNames = tree.fieldNames();
+		 int counter = 0;
 	     while(fieldNames.hasNext()){
+	    	 counter++;
 	         String fieldName = fieldNames.next();
 	         JsonNode fieldValue = tree.get(fieldName);
 	         if (fieldValue.isObject()) {
-	        	 resp.getWriter().write(String.format("%s: ", fieldName + "\n"));
-	            printNode(fieldValue, resp);
+	        	 logger.info("Value is Node");
+	        	 resp.getWriter().write(String.format("%s: ", fieldName));
+	        	 resp.getWriter().println();	        	 
+	        	 printNode(fieldValue, resp);
 	         } else {
-	            String value = fieldValue.asText();
-	            resp.getWriter().write(String.format("%s: %s", fieldName, value) + "\n");
+	        	 logger.info("Value is non-Node");
+	        	 String value = fieldValue.asText();
+	        	 resp.getWriter().write(String.format("%s: %s", fieldName, value));
+	        	 resp.getWriter().println();
 	         }
 	     }
+	     logger.info("Iterations: " + counter);
 	     resp.getWriter().write("\n\n");
 	     return resp;
 	}
@@ -220,7 +227,11 @@ public class SmartServlet extends HttpServlet {
 
             	//logger.info("Response Content: " + uuids);
             	json = new JSONObject();
-            	json.put("vm", content);
+            	if ( content.startsWith("["))
+            		json.put("vm", content);
+            	else
+            		json.put("vm", new JSONObject(content));
+            	
         		logger.info("Created JSONObject");
             } else {
                 // Server returned HTTP error code.
